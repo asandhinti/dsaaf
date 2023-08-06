@@ -14,6 +14,7 @@ library(readr)
 ### Shooting project data
 * The dataset is derived from https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic
 * It is read into the dataframe using read_csv function from readr package.
+* WARNING:  the formatting of this ppt will be different than the one in the video.  For the purpose of clarity, the ppt in the video has been edited.
 
 ```{r, include=FALSE}
 url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
