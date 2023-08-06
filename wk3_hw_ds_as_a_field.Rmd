@@ -1,0 +1,102 @@
+---
+title: "week3_hw"
+author: "Anand Sandhinti"
+date: "2023-08-02"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+```
+
+
+### Shooting project data
+* The dataset is derived from https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic
+* It is read into the dataframe using read_csv function from readr package.
+
+```{r, include=FALSE}
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+nypd_df <- read_csv(url_in)
+```
+
+## summary of the data
+
+
+* The dataset is an aggregate of shooting incidents from Jan 1 of 2006 to Dec 31st of 2022.
+* It includes such information as when and where the shooting took place, and who the attacker and victims were.
+* OCCUR_DATE attribute was read as char datatype.  It was converted to a date datatype in the pre-processing stage, so as to make possible time based analysis.
+
+
+```{r}
+
+nypd_df$OCCUR_DATE = as.Date(nypd_df$OCCUR_DATE, "%m/%d/%Y")
+
+summary(nypd_df)
+```
+
+### null values
+
+* I used the functions colSums() and is.na() to aggregate the presence of null values in each column.   The count of records in the nypd_df object was 27,312.  Columns LOC_OF_OCCUR_DESC and LOC_CLASSFCTN_DESC had each 25,596 null values.  This was followed by LOCATION_DESC having 14,977 null values.  Lastly, columns PERP_AGE_GROUP, PERP_SEX, and PERP_RACE had upwards of 9,300 null values.  However, the sex, age, and race of shooting victims had no null values.   
+
+```{r}
+
+count(nypd_df)
+
+colSums(is.na(nypd_df))
+```
+
+## Visualizations 
+
+* A histogram of Boroughs shows that most shootings took place in Brooklyn and Bronx.
+
+
+```{r}
+boro_hist <- barplot(table(nypd_df$BORO), xlab = "5 Boroughs", ylab = "Frequency of shootings", main = "Frequency of shootings in the 5 boroughs from 2006 to 2022")
+```
+
+* The second visualization indicates that most shootings  took place on the street.  However, this is biased because the LOC_CLASSFCTN_DESC column is having 25,596 null values, out of a possible 27,312.  It might be an interesting question to ask NYPD why the location of shooting is left so empty in this data object, for I am assuming that every shooting incident is initially treated as a crime scene.
+
+```{r}
+loc_hist <- barplot(table(nypd_df$LOC_CLASSFCTN_DESC), xlab = "location", ylab = "Frequency of shootings", main = "Frequency of shootings based on location between 2006 and 2022 in NYC") 
+
+```
+
+* Lastly, I wanted to look at when most shootings took place.  It was during night times.
+
+```{r}
+loc_hist <- barplot(table(nypd_df$OCCUR_TIME), xlab = "Occur Time", ylab = "Frequency of shootings", main = "Frequency of shootings based on Occur Time between 2006 and 2022 in NYC") 
+```
+
+## Correlation models on Victims age, sex, and race
+
+* I want to know if age, sex, and race of victims are correlated, as it is often young, male, and colored people who are unequally the victims. I will conduct chi-square test to measure correlaction because all three variables are categorical variables.   
+
+```{r}
+table(nypd_df$VIC_AGE_GROUP, nypd_df$VIC_RACE)
+
+chisq.test(nypd_df$VIC_AGE_GROUP, nypd_df$VIC_RACE, correct=FALSE)
+```
+
+* In the above analysis between Age and Race of Victims, the chi-squared value was 2358.7 and the p-value was less than 2.2e-16.  Even with a significance level of 0.00000001, we can reject the null hypothesis that Age and Race of victims are not dependent.  
+
+* The table further highlights the high number of black victims among all age groups.  Also of note is the age group '1022'.  Further investigation is needed to determine if this is a typo.
+
+```{r}
+table(nypd_df$VIC_RACE, nypd_df$VIC_SEX)
+
+chisq.test(nypd_df$VIC_RACE, nypd_df$VIC_SEX, correct=FALSE)
+```
+
+* Similarly, in the above analysis between Race and Sex of Victims, overwhelming number of victims were male and black.  Among the females, black victims were also the highest in number.  The chi-squared value was 1906.6 and the p-value was less than 2.2e16.  We can easily reject the null hypothesis that Age and Sex of victims are not dependent.
+
+* Again, the table highlights the high number of shooting victims as black males.
+
+## Summary
+
+* Analysis indicated that most shootings took place in Brooklyn and during the night times.  I can also suggest that most shootings took place on the street, but the large number of null values for this variables makes it a biased conclusion.  
+
+* As to the chi-squared tests above, there is a strong relationship between Age and Sex of victims, as well as in the Age and Race of the victims.
+
+* High null values with regard to the perpetrator and also with regard to the location (with the exception of lat, lon, borough, precinct) can lead to bias if I use those attributes to generate knowledge.
