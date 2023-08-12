@@ -16,6 +16,7 @@ library(lubridate)
 * I am ingesting 4 csv files, one each for global confirmed cases and deaths, and US confirmed cases and deaths.  
 * Between global and US csv files, there are slight differences in schema.  For example, US csv files have FIPS number (counties).
 * As my skill set with R is at beggining stage, I will be reusing much of the code from the instruction videos.
+* The question of interest for me was looking at why people might have been so antagonistic to lock downs and other pandemic restrictions.
 
 ## Time-series covid data urls created using string concatenation method
 ```{r get_jhu_data}
