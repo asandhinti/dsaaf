@@ -1,0 +1,136 @@
+---
+title: "wk5_hw_dsaaf_covid_data_analysis"
+author: "Anand Sandhinti"
+date: "2023-08-06"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(lubridate)
+```
+### Covid Data Ingestion
+* I am ingesting covid data from the below URL's.  The benefit of this method is that the code and data can come together as long as an internet connection is present at the computer the code is run at.
+* I am ingesting 4 csv files, one each for global confirmed cases and deaths, and US confirmed cases and deaths.  
+* Between global and US csv files, there are slight differences in schema.  For example, US csv files have FIPS number (counties).
+* As my skill set with R is at beggining stage, I will be reusing much of the code from the instruction videos.
+
+## Time-series covid data urls created using string concatenation method
+```{r get_jhu_data}
+url_in <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
+file_names <- c("time_series_covid19_confirmed_global.csv", "time_series_covid19_deaths_global.csv", "time_series_covid19_confirmed_US.csv", "time_series_covid19_deaths_US.csv")
+urls <- str_c(url_in, file_names)
+```
+
+## Reading specific url to a specific dataframe
+```{r import_data, message = FALSE}
+global_cases <- read_csv(urls[1])
+global_deaths <- read_csv(urls[2])
+US_cases <- read_csv(urls[3])
+US_deaths <- read_csv(urls[4])
+```
+
+## Tidying global data
+* The csv files have date as a column.  For example, '1/22/20', '1/23/20',... are columns.  The below code pivots these columns into rows. This is followed by joining the cases and deaths dataframes.
+```{r}
+head(global_cases)
+```
+
+```{r tidy_global_data}
+global_cases <- global_cases %>% pivot_longer(cols = -c(`Province/State`, `Country/Region`, Lat, Long), names_to = "date", values_to = "cases") %>% select(-c(Lat, Long))
+
+global_deaths <- global_deaths %>% pivot_longer(cols = -c(`Province/State`, `Country/Region`, Lat, Long), names_to = "date", values_to = "deaths") %>% select(-c(Lat, Long))
+
+global <- global_cases %>% full_join(global_deaths) %>% rename(Country_Region = `Country/Region`, Province_State = `Province/State`) %>% mutate(date = mdy(date))
+```
+
+### The final output after pivoting and joining global data.
+
+```{r}
+head(global)
+```
+
+## Tidying US data
+* Similar to global data, I am pivoting the US data by date and then joining cases and deaths into one data object named US.
+```{r tidy_US_data}
+US_cases <- US_cases %>% pivot_longer(cols = -(UID:Combined_Key), names_to = "date", values_to = "cases") %>% select(Admin2:cases) %>% mutate(date = mdy(date)) %>% select(-c(Lat, Long_))
+
+US_deaths <- US_deaths %>% pivot_longer(cols = -(UID:Population), names_to = "date", values_to = "deaths") %>% select(Admin2:deaths) %>% mutate(date = mdy(date)) %>% select(-c(Lat, Long_))
+
+US <- US_cases %>% full_join(US_deaths)
+```
+
+## Joining global and US data objects
+* In this part of data collection and integration, I am joining US and Global data objects, such that if need be, I can do analysis at the whole global level.  
+```{r}
+global <- global %>%
+  unite("Combined_Key",
+        c(Province_State, Country_Region),
+        sep = ", ",
+        na.rm = TRUE,
+        remove = FALSE)
+
+uid_lookup_url <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/UID_ISO_FIPS_LookUp_Table.csv"
+
+uid <- read_csv(uid_lookup_url) %>% select(-c(Lat, Long_, Combined_Key, code3, iso2, iso3, Admin2))
+
+global <- global %>% left_join(uid, by = c("Province_State", "Country_Region")) %>% select(-c(UID, FIPS)) %>% select(Province_State, Country_Region, date, cases, deaths, Population, Combined_Key)
+```
+
+
+
+## US by each state
+* Here we are aggregating US data by state.
+```{r}
+US_by_state <- US %>% group_by(Province_State, Country_Region, date) %>% summarize(cases = sum(cases), deaths = sum(deaths), Population = sum(Population)) %>% mutate(deaths_per_mill = deaths * 1000000 / Population) %>% select(Province_State, Country_Region, date, cases, deaths, deaths_per_mill, Population) %>% ungroup()
+```
+## Plot depicting deaths caused by Covid-19 among states
+
+```{r}
+ggplot(US_by_state, aes(x=deaths))+geom_histogram()+ labs("Deaths caused by Covid-19 among states")
+```
+
+* The above plot indicates that only a few states out of 50 showed accumulated deaths over 50,000.  This may have lead to varying interpretation of the severity of the Covid pandemic.
+
+## US Total deaths by day
+
+* The below code aggregates cases and deaths in US by day
+
+```{r}
+US_totals <- US_by_state %>%
+  group_by(Country_Region, date) %>%
+  summarize(cases = sum(cases), deaths = sum(deaths), Population = sum(Population)) %>% mutate(deaths_per_mill = deaths * 1000000 / Population) %>% select(Country_Region, date, cases, deaths, deaths_per_mill, Population) %>% ungroup()
+```
+
+```{r}
+ggplot(US_totals, aes(x=date, y = deaths))+geom_line()+ labs("Deaths caused by Covid-19 in US")
+```
+* looking at the plot of deaths in US by date, I see a linear relationship, maybe with a constant slope.  This may have created the impression that even with the lock downs, the number of deaths seem to be constant.  Hence, the impression created could be that lock downs are not so effective because the death rate seem to remain the same.
+
+
+## Linear Regression model for cases and deaths in US over time
+* I wanted to check if a linear model can explain the relationship between cases and deaths. 
+
+```{r}
+mod <- lm(deaths ~ cases, data = US_totals)
+summary(mod)
+```
+
+```{r}
+US_totals %>% mutate(pred = predict(mod))
+```
+
+```{r}
+US_tot_w_pred <- US_totals %>% mutate(pred = predict(mod))
+
+US_tot_w_pred %>% ggplot() + geom_point(aes(x = cases, y = deaths), color = "blue") + geom_point(aes(x = cases, y = pred), color = "red")
+```
+
+* I think the a linear model can explain the relationship, as showcased in the graph above.
+
+### SUMMARY
+
+* Integrating the 4 CSV files depicting global and US data formed the bulk of the code base.  Possible biases include the disparities in data collection across the globe.  For example, news reports often were skeptical of China's covid-19 numbers.  Similarly, in countries where the health infrastructure is not well established, the numbers may be under represented.
+* The two graphs, showing the number of deaths by state and the total number of deaths by day in US can be used to make some interesting arguments.  For example, only a few states showed high total deaths.  Similarly, the cases and deaths seem to have a linear relationship, even after the lockdowns and pandemic protocols.  This might have created the impression that the lockdowns were not that effective, because of expectation that the lockdowns aught to bring the cases and deaths to zero.
